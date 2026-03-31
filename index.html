@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa CCB Manaus</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+<style>
+    /* Ajustes para Celular */
+@media (max-width: 768px) {
+    .fondo {
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        bottom: auto !important; /* Tira do fundo para não sumir com o teclado */
+        top: 10px; /* Coloca no topo no mobile */
+        width: 90% !important;
+    }
+    
+    .fondo:hover {
+        width: 90% !important; /* Evita que cresça demais */
+    }
+
+    .painel {
+        top: 65px !important; /* Desce para não ficar embaixo da busca */
+        right: 5% !important;
+        width: 90% !important;
+        min-width: auto !important;
+        max-height: 30vh; /* Limita a altura para não cobrir o mapa todo */
+        overflow-y: auto;
+    }
+
+    .painel-bottom {
+        bottom: 20px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+    }
+}
+    body { margin: 0; font-family: Arial; }
+    #map { height: 100vh; }
+
+    .btn-rota {
+        display: inline-block;
+        margin-top: 8px;
+        padding: 6px 10px;
+        background: #007bff;
+        color: white;
+        text-decoration: none;
+        border-radius: 5px;
+        font-size: 13px;
+    }
+*{
+        font-family: 'nunito', sans-serif;
+        font-weight: bold;
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    body {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+    .fondo {
+        position: absolute; /* Essencial para flutuar sobre o mapa */
+        bottom:  70px;          /* Distância do topo */
+        left: 100px;          /* Move para o meio da largura */
+        transform: translateX(-20%);
+        width: 60px;        /* Tamanho inicial pequeno */
+     height: 45px;       /* Altura definida */
+        display: flex;      /* Para alinhar ícone e input lado a lado */
+        align-items: center;
+
+        background: #EEEEEE;
+        border-radius: 8px;
+        padding: 0 15px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        transition: .5s ease;
+        z-index: 1100;
+    }
+    .fondo:hover {
+        width: 400px;
+    }
+    input {
+        width: 100%;
+        height: 100%;
+        color: #000000;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-size: 20px;
+    }
+    i{
+        font-size: 22px;
+        color: #6528F7;
+        cursor: pointer;
+    } 
+    /* Painel superior direito */
+    .painel {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 230px;
+        background: white;
+        padding: 12px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-size: 14px;
+        min-width: 230px;
+    }
+   
+
+    /* Painel inferior */
+    .painel-bottom {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        z-index: 1000;
+    }
+
+    button {
+        padding: 10px 15px;
+        background: #28a745;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+</style>
+</head>
+
+<body>
+<div class="fondo">
+    <i class="fas fa-search">🔎</i> <input type="text" id="inputBusca" placeholder="Buscar igreja..." oninput="buscarIgreja()">
+</div>
+<div id="map"></div>
+
+<div class="painel" id="painelCulto">
+    <b>📅 Dias de Culto</b><br>
+    Clique em uma igreja
+</div>
+
+<div class="painel-bottom">
+    <button onclick="igrejaMaisProxima()">⛪ Igreja mais próxima</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    function buscarIgreja() {
+    const termoBusca = document.getElementById("inputBusca").value.toLowerCase();
+    
+    // Filtramos os marcadores que batem com a busca
+    let encontrados = [];
+
+    marcadores.forEach(item => {
+        const nomeIgreja = item.igreja.nome.toLowerCase();
+        const enderecoIgreja = item.igreja.morada.toLowerCase();
+
+        if (nomeIgreja.includes(termoBusca) || enderecoIgreja.includes(termoBusca)) {
+            item.marker.addTo(map);
+            encontrados.push(item); // Adiciona na lista de resultados visíveis
+        } else {
+            map.removeLayer(item.marker);
+        }
+    });
+
+    // LÓGICA DE ATUALIZAÇÃO DO PAINEL E POPUP:
+    // Se a busca retornar exatamente 1 igreja, focamos nela e abrimos as informações
+    if (encontrados.length === 1) {
+        const alvo = encontrados[0];
+        const latLng = [alvo.igreja.lat, alvo.igreja.lng];
+        
+        // No mobile, centralizamos um pouco acima para o teclado não cobrir
+        if (window.innerWidth < 768) {
+            map.setView(latLng, 15);
+            // Faz o mapa "subir" um pouco (0.005 graus) para compensar o teclado
+            map.panBy([0, -100]); 
+        } else {
+            map.setView(latLng, 15);
+        }
+        
+        alvo.marker.openPopup();
+        atualizarPainel(alvo.igreja);
+
+        // Fecha o teclado automaticamente após encontrar (opcional)
+        document.getElementById("inputBusca").blur();
+    }
+    // Se o usuário apagar a busca, resetamos o painel para a mensagem inicial
+    else if (termoBusca === "") {
+        document.getElementById("painelCulto").innerHTML = "<b>📅 Dias de Culto</b><br>Clique em uma igreja";
+    }
+}
+
+const map = L.map('map').setView([-3.05, -60.0], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+window.visualViewport.addEventListener('resize', () => {
+    map.invalidateSize(); // Força o Leaflet a recalcular o tamanho da tela
+});
+
+// Ícones
+const iconeAzul = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+    iconSize: [32, 32]
+});
+
+const iconeGrande = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+    iconSize: [45, 45]
+});
+
+const iconeYellow = L.icon({
+    iconUrl: 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png',
+    iconSize: [32, 32]
+});
+
+// Igrejas com dias de culto
+const igrejas = [
+    { 
+            nome: "CCB - Alvorada (Central)", 
+            lat: -3.0740, lng: -60.0421, 
+            morada: "R. Ovídio Gomes Monteiro, 2041 - Alvorada" ,
+            culto: "<br>Quarta-Feira 19:30h</br><br>Sábado 19:30h</br><br>Domingo 18:30h</br>"
+        },
+    { 
+            nome: "CCB - Amazonino Mendes", 
+            lat: -3.0467, lng:  -59.9509, 
+            morada: " R. 38, 148 - Cidade Nova, Manaus" ,
+            culto: "<br>Sexta-Feira 19:30h</br><br>Domingo 18:30h</br>"
+        },
+         { 
+            nome: "CCB - Armando Mendes", 
+            lat: -3.09294, lng: -59.9380, 
+            morada: "Av. Penetracao Norte Sul- Armando Mendes" ,
+            culto: "<br>Terça-Feira 19:30h</br><br>Domingo 18:30h</br>"
+        },
+    { 
+        nome: "CCB - Monte das Oliveiras", 
+        lat: -2.9991, 
+        lng: -59.9964,
+        morada: "R. Jatobá, 70 - Monte das Oliveiras",
+        culto: "<br>Quinta-Feira 19:30h</br><br>Domingo 18:30h</br>"
+    },
+    { 
+        nome: "CCB - Manoa", 
+        lat: -3.0251, 
+        lng: -60.0015,
+        morada: "R. Nelson Pereira, 7 - Col. Santo Antônio",
+        culto: "<br>Terça 19:30h</br><br>Sexta 19:30h</br>"
+    },
+     { 
+            nome: "CCB - Santa Etelvina", 
+            lat: -2.9856, lng: -60.01697, 
+            morada: "R. R. Juruá - Santa Etelvina",
+            culto: "<br>Segunda-Feira 19:30h</br><br>Quarta-Feira 19:30h</br><br>Sábado 19:30h</br>"
+        }
+];
+
+let minhaLocalizacao = null;
+let marcadorUsuario;
+let marcadores = [];
+
+// Distância (Haversine)
+function distancia(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI/180;
+    const dLon = (lon2 - lon1) * Math.PI/180;
+
+    const a = Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180) *
+        Math.cos(lat2*Math.PI/180) *
+        Math.sin(dLon/2)**2;
+
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// Popup com rota
+function criarPopup(igreja) {
+    let link;
+
+    if (minhaLocalizacao) {
+        link = `https://www.google.com/maps/dir/?api=1&origin=${minhaLocalizacao.lat},${minhaLocalizacao.lng}&destination=${igreja.lat},${igreja.lng}`;
+    } else {
+        link = `https://www.google.com/maps/dir/?api=1&destination=${igreja.lat},${igreja.lng}`;
+    }
+
+    return `
+        <b>${igreja.nome}</b><br>
+        <span style="color: #666; font-size: 11px;">${igreja.morada}</span><br>
+        <a href="${link}" target="_blank" class="btn-rota">
+            🚗 Ir pelo Google Maps
+        </a>
+    `;
+}
+
+// Atualiza painel
+function atualizarPainel(igreja) {
+    document.getElementById("painelCulto").innerHTML =
+        `<b>📅 ${igreja.nome}</b><br>${igreja.culto}`;
+}
+
+// Adicionar igrejas
+function adicionarIgrejas() {
+
+    igrejas.forEach(igreja => {
+
+        const marker = L.marker([igreja.lat, igreja.lng], { icon: iconeAzul })
+            .addTo(map)
+            .bindPopup(criarPopup(igreja));
+
+        marker.on("click", () => {
+            atualizarPainel(igreja);
+        });
+
+        marcadores.push({ marker, igreja });
+    });
+}
+
+// Igreja mais próxima
+function igrejaMaisProxima() {
+
+    if (!minhaLocalizacao) return;
+
+    let menor = Infinity;
+    let maisProxima = null;
+
+    marcadores.forEach(item => {
+
+        const d = distancia(
+            minhaLocalizacao.lat,
+            minhaLocalizacao.lng,
+            item.igreja.lat,
+            item.igreja.lng
+        );
+
+        if (d < menor) {
+            menor = d;
+            maisProxima = item;
+        }
+
+        // volta ícone normal
+        item.marker.setIcon(iconeAzul);
+    });
+
+    if (maisProxima) {
+        maisProxima.marker.setIcon(iconeGrande);
+        maisProxima.marker.openPopup();
+        atualizarPainel(maisProxima.igreja);
+        map.setView(maisProxima.marker.getLatLng(), 15);
+    }
+}
+
+// Atualiza popups
+function atualizarPopups() {
+    marcadores.forEach(item => {
+        item.marker.setPopupContent(criarPopup(item.igreja));
+    });
+}
+
+// Geolocalização automática (mantida)
+function pegarLocalizacao() {
+
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(pos => {
+
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        minhaLocalizacao = { lat, lng };
+
+        if (marcadorUsuario) {
+            map.removeLayer(marcadorUsuario);
+        }
+
+        marcadorUsuario = L.marker([lat, lng], { icon: iconeYellow })
+            .addTo(map)
+            .bindPopup("📍 Você está aqui")
+            .openPopup();
+
+        map.setView([lat, lng], 14);
+
+        atualizarPopups();
+
+    });
+}
+
+// Inicialização
+adicionarIgrejas();
+pegarLocalizacao();
+
+</script>
+
+</body>
+</html>
